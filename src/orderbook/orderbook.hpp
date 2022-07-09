@@ -4,29 +4,32 @@
 #include <chrono>
 #include <functional>
 #include <shared_mutex>
+#include <atomic>
 
 namespace orderbook {
     enum class Orderside : short {
-        ask,
-        bid
+        buy,
+        sell
     };
 
     /**
      * @brief Structure that maintain order in order book
      * Assumtions while using this structure, two orders are same if the side clientId and orderId are equal
      * Size is always updated and the latest size will be found in orderbook.
+     * Invalid order is where price, size, clientId and orderId are set to -1
      */
     struct Order
     {
         const Orderside side;
-        const uint64_t timestamp;
-        const float price;
-        float size; // size will change as the orders are matched
+        std::size_t timestamp = 0; // timestamp will be maintained by the orderbook
+        const int price;
+        int size; // size will change as the orders are matched
 
-        const uint clientId;
-        const uint orderId;
+        const int clientId;
+        const int orderId;
         // constructor
-        Order(Orderside side, uint clientId, uint orderId, uint64_t timestamp, float price, float size);
+        Order();
+        Order(Orderside side, int clientId, int orderId, int price, int size);
 
         bool operator<(const Order& other) const;
         bool operator>(const Order& other) const;
@@ -46,9 +49,12 @@ namespace orderbook {
         // to map order_key i.e (clientId, orderId) -> Order
         std::map<std::pair<uint, uint>, Order> placedOrders;
         // to support multiple threads
-        std::shared_mutex mtx;
+        mutable std::shared_mutex mtx;
 
         void match(Order& order);
+
+        // for naive timestamp we will just use a counter
+        std::atomic<std::size_t> gTimestamp = 1;
     public:
         // To add order to orderbook
         bool add_order(Order& order);

@@ -3,7 +3,11 @@
 #include <mutex>
 using namespace orderbook;
 
-Order::Order(Orderside side, uint clientId, uint orderId, uint64_t timestamp, float price, float size) : side(side), timestamp(timestamp), price(price), size(size), clientId(clientId), orderId(orderId)
+Order::Order() : side(Orderside::buy), price(-1), size(-1), clientId(-1), orderId(-1)
+{
+}
+
+Order::Order(Orderside side, int clientId, int orderId, int price, int size) :side(side), price(price), size(size), clientId(clientId), orderId(orderId)
 {
 }
 
@@ -41,14 +45,15 @@ bool Orderbook::add_order(Order& order)
     if(placedOrders.count(orderKey))
         return false; // order already exists
     bool orderAdded = false;
-    std::unique_lock lk(mtx);
 
-    if (order.side == Orderside::ask)
+    std::unique_lock lk(mtx);
+    order.timestamp = ++gTimestamp;
+    if (order.side == Orderside::buy)
     {
         auto [_a,b] = asks.insert(order);
         orderAdded = b;
     }
-    else if(order.side == Orderside::bid)
+    else if(order.side == Orderside::sell)
     {
         auto [_a,b] = bids.insert(order);
         orderAdded = b;
@@ -76,11 +81,11 @@ bool Orderbook::cancel_order(uint clientId, uint orderId)
     const Order& order = iteOrder->second;
     bool orderErased = false;
     std::unique_lock lk(mtx);
-    if(order.side == Orderside::ask)
+    if(order.side == Orderside::buy)
     {
         orderErased = asks.erase(order) == 1;
     }
-    else if(order.side == Orderside::bid)
+    else if(order.side == Orderside::sell)
     {
         orderErased = bids.erase(order) == 1;
     }
@@ -100,11 +105,15 @@ void Orderbook::flush()
 
 Order Orderbook::getMinAsk() const
 {
+    if(asks.empty())
+        return Order();
     std::shared_lock lk(mtx);
     return *asks.begin();
 }
 Order Orderbook::getMaxBid() const
 {
+    if(bids.empty())
+        return Order();
     std::shared_lock lk(mtx);
     return *bids.begin();
 }
