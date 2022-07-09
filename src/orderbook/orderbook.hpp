@@ -6,49 +6,28 @@
 #include <shared_mutex>
 #include <atomic>
 
+#include "order.hpp"
+
 namespace orderbook {
-    enum class Orderside : short {
-        buy,
-        sell
-    };
-
-    /**
-     * @brief Structure that maintain order in order book
-     * Assumtions while using this structure, two orders are same if the side clientId and orderId are equal
-     * Size is always updated and the latest size will be found in orderbook.
-     * Invalid order is where price, size, clientId and orderId are set to -1
-     */
-    struct Order
-    {
-        Orderside side;
-        std::size_t timestamp = 0; // timestamp will be maintained by the orderbook
-        int price;
-        int size; // size will change as the orders are matched
-
-        int clientId;
-        int orderId;
-        // constructor
-        Order();
-        Order(Orderside side, int clientId, int orderId, int price, int size);
-
-        bool isInvalid() const;
-
-        bool operator<(const Order& other) const;
-        bool operator>(const Order& other) const;
-        bool operator==(const Order& other) const;
-        Order& operator=(const Order& other) = default;
-    };
-
     /**
      * @brief Orderbook to track bid and ask orders
      * Orders must follow assumptions of the structure Order, two orders with same side, clientId and orderId with different prices should not be added
      */
     class Orderbook
     {
+        struct AsksComparator
+        {
+            bool operator()(const Order& a, const Order& b) const;
+        };
+
+        struct BidsComparator
+        {
+            bool operator()(const Order& a, const Order& b) const;
+        };
         // to store asks
-        std::set<Order> asks;
+        std::set<Order, AsksComparator> asks;
         // to store bids
-        std::set<Order, std::greater<Order>> bids;
+        std::set<Order, BidsComparator> bids;
         // to map order_key i.e (clientId, orderId) -> Order
         std::map<std::pair<int, int>, Order> placedOrders;
         // to support multiple threads

@@ -73,6 +73,19 @@ void print_matched_transaction(std::ostream& o, const Order& book, const Order& 
     o << "T, " << buyOrder.clientId << ", " << buyOrder.orderId << ", " << sellOrder.clientId << ", " << sellOrder.orderId << ", " << price << ", " << quantity << "\n";
 }
 
+struct PrintCommand : InputCommand
+{
+    std::string line;
+    PrintCommand(std::string&& line) : line(std::move(line))
+    {
+    }
+
+    virtual void execute(OrderbookManager&, std::ostream& o) const override
+    {
+        o << line << "\n";
+    }
+};
+
 struct NewOrderCommand : InputCommand
 {
     int userId;
@@ -150,6 +163,7 @@ std::vector<InputCommandPtr> ParseInputCommands(std::istream& stream)
         switch (*line.begin())
         {
         case '#':
+            commands.push_back(InputCommandPtr(new PrintCommand(std::move(line))));
             break;
         case 'N':
         {

@@ -3,47 +3,39 @@
 #include <mutex>
 using namespace orderbook;
 
-Order::Order() : side(Orderside::buy), price(-1), size(-1), clientId(-1), orderId(-1)
-{
-}
 
-Order::Order(Orderside side, int clientId, int orderId, int price, int size) :side(side), price(price), size(size), clientId(clientId), orderId(orderId)
+bool Orderbook::AsksComparator::operator()(const Order& a, const Order& b) const
 {
-}
-
-bool Order::isInvalid() const
-{
-    static Order invalid = Order();
-    return *this == invalid;
-}
-
-bool Order::operator<(const Order& other) const
-{
-    if (price != other.price)
+    if (a.price != b.price)
     {
-        return price < other.price;
+        return a.price < b.price;
     }
-    else if (timestamp != other.timestamp)
+    else if (a.timestamp != b.timestamp)
     {
-        return timestamp < other.timestamp;
+        return a.timestamp < b.timestamp;
     }
-    else if (clientId != other.clientId)
+    else if (a.clientId != b.clientId)
     {
-        return clientId < other.clientId;
+        return a.clientId < b.clientId;
     }
-    return orderId < other.orderId;
+    return a.orderId < b.orderId;
 }
 
-bool Order::operator>(const Order& other) const
+bool Orderbook::BidsComparator::operator()(const Order& a, const Order& b) const
 {
-    if (operator==(other)) // if orders are equal then return false
-        return false;
-    return !operator<(other);
-}
-
-bool Order::operator==(const Order& other) const
-{
-    return side == other.side && clientId == other.clientId && orderId == other.orderId;
+    if (a.price != b.price)
+    {
+        return a.price > b.price;
+    }
+    else if (a.timestamp != b.timestamp)
+    {
+        return a.timestamp < b.timestamp;
+    }
+    else if (a.clientId != b.clientId)
+    {
+        return a.clientId < b.clientId;
+    }
+    return a.orderId < b.orderId;
 }
 
 bool Orderbook::add_order(Order& order, MatchFunctor& matchFunctor)
