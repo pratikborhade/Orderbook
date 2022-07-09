@@ -20,20 +20,23 @@ namespace orderbook {
      */
     struct Order
     {
-        const Orderside side;
+        Orderside side;
         std::size_t timestamp = 0; // timestamp will be maintained by the orderbook
-        const int price;
+        int price;
         int size; // size will change as the orders are matched
 
-        const int clientId;
-        const int orderId;
+        int clientId;
+        int orderId;
         // constructor
         Order();
         Order(Orderside side, int clientId, int orderId, int price, int size);
 
+        bool isInvalid() const;
+
         bool operator<(const Order& other) const;
         bool operator>(const Order& other) const;
-        bool operator==(const Order& other) const; 
+        bool operator==(const Order& other) const;
+        Order& operator=(const Order& other) = default;
     };
 
     /**
@@ -47,19 +50,22 @@ namespace orderbook {
         // to store bids
         std::set<Order, std::greater<Order>> bids;
         // to map order_key i.e (clientId, orderId) -> Order
-        std::map<std::pair<uint, uint>, Order> placedOrders;
+        std::map<std::pair<int, int>, Order> placedOrders;
         // to support multiple threads
         mutable std::shared_mutex mtx;
 
-        void match(Order& order);
-
         // for naive timestamp we will just use a counter
         std::atomic<std::size_t> gTimestamp = 1;
+
     public:
+        // functor which is called in case of match
+        // calls with order in orderbook, added order, price and size
+        using MatchFunctor = std::function<bool(const Order&, const Order&, int, int)>;
+
         // To add order to orderbook
-        bool add_order(Order& order);
+        bool add_order(Order& order, MatchFunctor &matchFunctor);
         // to remove order from orderbook
-        bool cancel_order(uint clientId, uint orderId);
+        bool cancel_order(int clientId, int orderId);
         // to clear orderbook
         void flush();
 
@@ -68,6 +74,11 @@ namespace orderbook {
 
         // Get min bid order
         Order getMaxBid() const;
+
+    private:
+        // call to match orders / should aquire write lock to mutex
+        // returns if the order is fullfilled or not during match
+        bool match(Order& order, MatchFunctor& matchFunctor);
     };
 
 }
