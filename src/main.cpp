@@ -1,5 +1,6 @@
 #include <iostream>
 #include <memory>
+#include <fstream>
 #include "orderbook/orderbook.hpp"
 
 using namespace orderbook;
@@ -20,7 +21,7 @@ using namespace orderbook;
 */
 struct InputCommand
 {
-    virtual void execute(std::map<std::string, Orderbook>& orderbooks, std::ostream& o) = 0;
+    virtual void execute(std::map<std::string, Orderbook>& orderbooks, std::ostream& o) const = 0;
 };
 
 struct OrderbookChangesTracker
@@ -69,7 +70,7 @@ struct NewOrderCommand : InputCommand
     {
     }
 
-    virtual void execute(std::map<std::string, Orderbook>& orderbooks, std::ostream& o) override
+    virtual void execute(std::map<std::string, Orderbook>& orderbooks, std::ostream& o) const override
     {
         OrderbookChangesTracker tracker(orderbooks[symbol]);
         Order newOrder(side, userId, orderId, price, quantity);
@@ -88,7 +89,7 @@ struct CancelOrderCommand : InputCommand
     CancelOrderCommand(int userId, int orderId) : userId(userId), orderId(orderId)
     {}
 
-    virtual void execute(std::map<std::string, Orderbook>& orderbooks, std::ostream& o) override
+    virtual void execute(std::map<std::string, Orderbook>& orderbooks, std::ostream& o) const override
     {
         std::for_each(orderbooks.begin(), orderbooks.end(), [this, &o](auto &orderbook)
         {
@@ -104,7 +105,7 @@ struct CancelOrderCommand : InputCommand
 
 struct FlushCommand : InputCommand
 {
-    virtual void execute(std::map<std::string, Orderbook>& orderbooks, std::ostream& o) override
+    virtual void execute(std::map<std::string, Orderbook>& orderbooks, std::ostream& o) const override
     {
         orderbooks.clear();
         o << "\n\n\n";
@@ -152,10 +153,31 @@ std::vector<InputCommandPtr> ParseInputCommands(std::istream &stream)
 }
 
 int main(int argc, char** argv) {
-    if(argc != 2)
+    if(argc != 3)
     {
         std::cout << "Input format is command input_file output_file\n";
         return -1;
     }
+    
+    std::fstream inFile(argv[1], std::ios_base::in);
+    if(!inFile.is_open())
+    {
+        std::cout << "Cannot open input file " << argv[1] << " please check if the location exists";
+    }
 
+    auto commands = ParseInputCommands(inFile);
+    inFile.close();
+
+    std::fstream outFile(argv[2], std::ios_base::out);
+    if(!outFile.is_open())
+    {
+        std::cout << "Cannot open output file " << argv[2];
+    }
+
+    std::map<std::string, Orderbook> orderbooks;
+    for (const auto& command : commands)
+    {
+        command->execute(orderbooks, outFile);
+    }
+    return 0;
 }
