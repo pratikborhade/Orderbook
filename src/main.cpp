@@ -11,23 +11,7 @@ using namespace std::placeholders;
 
 using OrderbookManager = std::map<std::string, Orderbook>;
 
-/*
-#Format new order:
-# N, user(int),symbol(string),price(int),qty(int),side(char B or S),userOrderId(int)
-#
-#Format cancel order:
-# C, user(int),userOrderId(int)
-#
-#Format flush order book:
-# F
-
-# Notes:
-# * Price is 0 for market order, <>0 for limit order
-# * TOB = Top Of Book, highest bid, lowest offer
-# * Between scenarios flush order books
-*/
-
-
+// interface which will help us to parse and execute commands later
 struct InputCommand
 {
     virtual void execute(OrderbookManager& orderbooks, std::ostream& o) const = 0;
@@ -72,6 +56,7 @@ void print_matched_transaction(std::ostream& o, Orderside orderside, int bookCli
     o << "T, " << buyer.first << ", " << buyer.second << ", " << seller.first << ", " << seller.second << ", " << price << ", " << quantity << "\n";
 }
 
+// This will help us print the comments in input file
 struct PrintCommand : InputCommand
 {
     std::string line;
@@ -149,6 +134,7 @@ struct FlushCommand : InputCommand
         o << "\n";
     }
 };
+
 using InputCommandPtr = std::unique_ptr<InputCommand>;
 std::vector<InputCommandPtr> ParseInputCommands(std::istream& stream)
 {
@@ -194,9 +180,9 @@ std::vector<InputCommandPtr> ParseInputCommands(std::istream& stream)
 }
 
 int main(int argc, char** argv) {
-    if (argc != 3)
+    if (argc != 2)
     {
-        std::cout << "Input format is command input_file output_file\n";
+        std::cout << "Input format is command input_file\n";
         return -1;
     }
 
@@ -209,17 +195,10 @@ int main(int argc, char** argv) {
     auto commands = ParseInputCommands(inFile);
     inFile.close();
 
-    std::fstream outFile(argv[2], std::ios_base::out);
-    if (!outFile.is_open())
-    {
-        std::cout << "Cannot open output file " << argv[2];
-    }
-
     OrderbookManager orderbooks;
     for (const auto& command : commands)
     {
-        command->execute(orderbooks, outFile);
+        command->execute(orderbooks, std::cout);
     }
-    outFile.close();
     return 0;
 }

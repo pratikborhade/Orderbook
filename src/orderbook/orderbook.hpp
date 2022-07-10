@@ -12,7 +12,7 @@
 namespace orderbook {
     /**
      * @brief Orderbook to track bid and ask orders
-     * Orders must follow assumptions of the structure Order, two orders with same side, clientId and orderId with different prices should not be added
+     * Orders must follow assumptions that there are no two orders with same side, clientId and orderId
      */
     class Orderbook
     {
@@ -20,7 +20,7 @@ namespace orderbook {
         std::map<int, std::unique_ptr<Orders>> asks;
         // to store bids
         std::map<int, std::unique_ptr<Orders>, std::greater<int>> bids;
-        // to map order_key i.e (clientId, orderId) -> (price, side)
+        // to map order_key i.e (clientId, orderId) -> (price, side) / used for cancel
         std::map<std::pair<int, int>, std::pair<int, Orderside>> placedOrders;
         // to support multiple threads
         mutable std::shared_mutex mtx;
@@ -31,16 +31,14 @@ namespace orderbook {
         using MatchFunctor = std::function<bool(Orderside orderside, int, int, int, int, int, int)>;
 
         // To add order to orderbook
-        bool add_order(Orderside side, int clientId, int orderId, int price, int quantity, MatchFunctor &matchFunctor);
+        bool add_order(Orderside side, int clientId, int orderId, int price, int quantity, MatchFunctor matchFunctor);
         // to remove order from orderbook
         bool cancel_order(int clientId, int orderId);
         // to clear orderbook
         void flush();
-
-        // Get max ask order
+        // Get max (price, quantity) in ask orders
         std::pair<int, int> get_min_ask() const;
-
-        // Get min bid order
+        // Get min (price, quantity) in bid orders
         std::pair<int, int> get_max_bid() const;
 
     private:

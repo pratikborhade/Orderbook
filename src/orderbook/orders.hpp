@@ -4,10 +4,8 @@
 #include <vector>
 namespace orderbook {
     /**
-     * @brief Structure that maintain order in order book
-     * Assumtions while using this structure, two orders are same if the side clientId and orderId are equal
-     * Size is always updated and the latest size will be found in orderbook.
-     * Invalid order is where price, size, clientId and orderId are set to -1
+     * @brief Structure that maintain order details in order book
+     * size variable will be updated as we add and remove orders
      */
     struct Orders
     {

@@ -3,7 +3,7 @@
 #include <mutex>
 using namespace orderbook;
 
-bool Orderbook::add_order(Orderside side, int clientId, int orderId, int price, int quantity, MatchFunctor& matchFunctor)
+bool Orderbook::add_order(Orderside side, int clientId, int orderId, int price, int quantity, MatchFunctor matchFunctor)
 {
     const auto orderKey = std::make_pair(clientId, orderId);
     if(placedOrders.count(orderKey))
@@ -14,6 +14,7 @@ bool Orderbook::add_order(Orderside side, int clientId, int orderId, int price, 
         return true;
 
     bool orderAdded = false;
+    // add order functor
     auto addOrder = [](auto& container, int clientId, int orderId, int price, int quantity) -> bool
     {
         auto ite = container.find(price);
@@ -29,6 +30,7 @@ bool Orderbook::add_order(Orderside side, int clientId, int orderId, int price, 
             return ite->second->add_order(clientId, orderId, quantity);
         }
     };
+
     if (side == Orderside::sell)
     {
         orderAdded = addOrder(asks, clientId, orderId, price, quantity);
@@ -56,6 +58,8 @@ bool Orderbook::cancel_order(int clientId, int orderId)
     Orderside side = iteOrder->second.second;
     bool orderErased = false;
     std::unique_lock lk(mtx);
+
+    // remove order functor
     auto removeOrder = [](auto& container, int clientId, int orderId, int price) -> bool
     {
         auto ite = container.find(price);
@@ -114,6 +118,7 @@ std::pair<int, int> Orderbook::get_max_bid() const
 
 bool Orderbook::match(Orderside side, int clientId, int orderId, int price, int& quantity, MatchFunctor& matchFunctor)
 {
+    // compares the current order price with min ask or max bid
     auto comparator = [](const Orderside side, int price, const auto& asks, const auto& bids) -> bool
     {
         if (side == Orderside::buy) // <- will get min ask
@@ -127,6 +132,7 @@ bool Orderbook::match(Orderside side, int clientId, int orderId, int price, int&
         return false;
     };
 
+    // consume the begin of ask or bid depending on orderside
     auto consume = [side](auto& container, int clientId, int orderId, int& quantity, MatchFunctor& matchFunctor)
     {
         auto ite = container.begin();
@@ -138,7 +144,11 @@ bool Orderbook::match(Orderside side, int clientId, int orderId, int price, int&
             auto current = details->orderDetails.begin();
             while(current != details->orderDetails.end() && quantity > 0)
             {
-                matchFunctor(side, current->clientId, current->orderId, clientId, orderId, book_price, std::min(current->quantity, quantity));
+                if(matchFunctor)
+                {
+                    matchFunctor(side, current->clientId, current->orderId, clientId, orderId, book_price, std::min(current->quantity, quantity));
+                }
+                
                 if(current->quantity > quantity)
                 {
                     current->quantity -= quantity;
@@ -155,9 +165,12 @@ bool Orderbook::match(Orderside side, int clientId, int orderId, int price, int&
         else
         {
             quantity -= details->size;
-            for (const auto& detail : details->orderDetails)
+            if(matchFunctor)
             {
-                matchFunctor(side, detail.clientId, detail.orderId, clientId, orderId, book_price, detail.quantity);
+                for (const auto& detail : details->orderDetails)
+                {
+                    matchFunctor(side, detail.clientId, detail.orderId, clientId, orderId, book_price, detail.quantity);
+                }
             }
             container.erase(ite);
         }
@@ -165,11 +178,11 @@ bool Orderbook::match(Orderside side, int clientId, int orderId, int price, int&
 
     while (quantity > 0 && comparator(side, price, asks, bids))
     {
-        if (side == Orderside::buy) // <- will get min ask
+        if (side == Orderside::buy)
         {
             consume(asks, clientId, orderId, quantity, matchFunctor);
         }
-        else if (side == Orderside::sell) // <- will get max bid
+        else if (side == Orderside::sell)
         {
             consume(bids, clientId, orderId, quantity, matchFunctor);
         }
