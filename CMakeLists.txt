@@ -23,6 +23,7 @@ add_test(NAME orderbook_test_cancel_orders COMMAND $<TARGET_FILE:cpp_test> order
 add_test(NAME orderbook_test_match_buy_side COMMAND $<TARGET_FILE:cpp_test> orderbook_test_match_buy_side)
 add_test(NAME orderbook_test_match_sell_side COMMAND $<TARGET_FILE:cpp_test> orderbook_test_match_sell_side)
 add_test(NAME orderbook_test_market_orders COMMAND $<TARGET_FILE:cpp_test> orderbook_test_market_orders)
+add_test(NAME orderbook_bench COMMAND $<TARGET_FILE:cpp_test> orderbook_bench 1000000)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})

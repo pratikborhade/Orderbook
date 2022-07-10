@@ -1,3 +1,3 @@
 #pragma once
 
-int run_orderbook_tests(const char * testName);
+int run_orderbook_tests(const char ** argv);

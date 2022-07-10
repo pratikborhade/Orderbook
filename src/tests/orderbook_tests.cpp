@@ -3,6 +3,8 @@
 #include <cstring>
 #include <vector>
 #include <iostream>
+#include <chrono>
+#include <random>
 
 using namespace orderbook;
 int orderbook_test_empty_orderbook()
@@ -400,8 +402,40 @@ int orderbook_test_flush()
     return 0;
 }
 
-int run_orderbook_tests(const char * testName)
+int orderbook_bench(const char ** argv)
 {
+    Orderbook book;
+    size_t iterations = std::stoll(argv[2]);
+    std::vector<Match> recent_matches;
+    std::random_device rd;
+    std::normal_distribution<> nor_dist(100, 10);
+    std::uniform_int_distribution<int> uni_distrib(1, 200);
+    std::mt19937 gen{rd()};
+
+    auto start = std::chrono::high_resolution_clock::now();
+    Orderbook::MatchFunctor functor = [&recent_matches](Orderside side, int a, int b, int c, int d, int p, int q) -> bool
+    {
+        recent_matches.push_back(Match{side, a, b, c, d, p, q});
+        return true;
+    };
+    for(size_t iteration = 0; iteration < iterations; ++iteration)
+    {
+        Orderside side = (rand() / RAND_MAX) > 0.5 ? Orderside::buy : Orderside::sell;
+        int price = std::round(nor_dist(gen));
+        if(price < 1)
+            price = 1;
+        int quantity = uni_distrib(gen);
+        book.add_order(side, iteration, 1, price, quantity, functor);
+    }
+    auto end = std::chrono::high_resolution_clock::now();
+    auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    std::cerr << "It took orderbook " << diff.count() << " milliseconds to process " << iterations << " orders";
+    return 0;
+}
+
+int run_orderbook_tests(const char ** argv)
+{
+    const char * testName = argv[1];
     if(std::strcmp("orderbook_test_empty_orderbook", testName) == 0)
     {
         return orderbook_test_empty_orderbook();
@@ -425,6 +459,10 @@ int run_orderbook_tests(const char * testName)
     else if(std::strcmp("orderbook_test_market_orders", testName) == 0)
     {
         return orderbook_test_market_orders();
+    }
+    else if(std::strcmp("orderbook_bench", testName) == 0)
+    {
+        return orderbook_bench(argv);
     }
     else if(std::strcmp("orderbook_test_flush", testName) == 0)
     {

@@ -2,13 +2,13 @@
 #include <iostream>
 #include <cstring>
 
-int main(int argc, char ** argv)
+int main(int argc, const char ** argv)
 {
-    if(argc == 2)
+    if(argc >= 2)
     {
         if( std::strncmp(argv[1], "orderbook", 9) == 0 )
         {
-            return run_orderbook_tests(argv[1]);
+            return run_orderbook_tests(argv);
         }
         else
         {

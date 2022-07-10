@@ -1,6 +1,7 @@
 #pragma once
 #include <stdexcept>
 #include <sstream>
+#include <iostream>
 void assert(bool condition, const char* message)
 {
     if(!condition)
@@ -11,10 +12,7 @@ void assert(bool condition, const char* message)
 
 void assert(bool condition, std::string message)
 {
-    if(!condition)
-    {
-        throw std::runtime_error(message);
-    }
+    assert(condition, message.c_str());
 }
 
 template<typename A, typename B>
