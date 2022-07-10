@@ -12,6 +12,8 @@ bool Orderbook::add_order(Orderside side, int clientId, int orderId, int price, 
     std::unique_lock<std::shared_mutex> lk(mtx);
     if (match(side, clientId, orderId, price, quantity, matchFunctor)) // check if order matches any exisiting orders
         return true;
+    if(price == 0)
+        return false;
 
     bool orderAdded = false;
     // add order functor

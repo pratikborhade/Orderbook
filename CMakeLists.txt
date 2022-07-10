@@ -20,6 +20,9 @@ add_test(NAME orderbook_test_empty_orderbook COMMAND $<TARGET_FILE:cpp_test> ord
 add_test(NAME orderbook_test_flush COMMAND $<TARGET_FILE:cpp_test> orderbook_test_flush)
 add_test(NAME orderbook_test_add_orders COMMAND $<TARGET_FILE:cpp_test> orderbook_test_add_orders)
 add_test(NAME orderbook_test_cancel_orders COMMAND $<TARGET_FILE:cpp_test> orderbook_test_cancel_orders)
+add_test(NAME orderbook_test_match_buy_side COMMAND $<TARGET_FILE:cpp_test> orderbook_test_match_buy_side)
+add_test(NAME orderbook_test_match_sell_side COMMAND $<TARGET_FILE:cpp_test> orderbook_test_match_sell_side)
+add_test(NAME orderbook_test_market_orders COMMAND $<TARGET_FILE:cpp_test> orderbook_test_market_orders)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
