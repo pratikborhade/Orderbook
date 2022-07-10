@@ -3,68 +3,45 @@
 #include <mutex>
 using namespace orderbook;
 
-
-bool Orderbook::AsksComparator::operator()(const Order& a, const Order& b) const
+bool Orderbook::add_order(Orderside side, int clientId, int orderId, int price, int quantity, MatchFunctor& matchFunctor)
 {
-    if (a.price != b.price)
-    {
-        return a.price < b.price;
-    }
-    else if (a.timestamp != b.timestamp)
-    {
-        return a.timestamp < b.timestamp;
-    }
-    else if (a.clientId != b.clientId)
-    {
-        return a.clientId < b.clientId;
-    }
-    return a.orderId < b.orderId;
-}
-
-bool Orderbook::BidsComparator::operator()(const Order& a, const Order& b) const
-{
-    if (a.price != b.price)
-    {
-        return a.price > b.price;
-    }
-    else if (a.timestamp != b.timestamp)
-    {
-        return a.timestamp < b.timestamp;
-    }
-    else if (a.clientId != b.clientId)
-    {
-        return a.clientId < b.clientId;
-    }
-    return a.orderId < b.orderId;
-}
-
-bool Orderbook::add_order(Order& order, MatchFunctor& matchFunctor)
-{
-    const auto orderKey = std::make_pair(order.clientId, order.orderId);
+    const auto orderKey = std::make_pair(clientId, orderId);
     if(placedOrders.count(orderKey))
         return false; // order already exists
-    order.timestamp = ++gTimestamp;
 
     std::unique_lock<std::shared_mutex> lk(mtx);
-    if (match(order, matchFunctor)) // check if order matches any exisiting orders
+    if (match(side, clientId, orderId, price, quantity, matchFunctor)) // check if order matches any exisiting orders
         return true;
 
     bool orderAdded = false;
-    if (order.side == Orderside::sell)
+    auto addOrder = [](auto& container, int clientId, int orderId, int price, int quantity) -> bool
     {
-        auto [_a,b] = asks.insert(order);
-        orderAdded = b;
+        auto ite = container.find(price);
+        if(ite == container.end())
+        {
+            std::unique_ptr<Orders> orders(new Orders);
+            orders->add_order(clientId, orderId, quantity);
+            container.insert(std::make_pair(price, std::move(orders)));
+            return true;
+        }
+        else
+        {
+            return ite->second->add_order(clientId, orderId, quantity);
+        }
+    };
+    if (side == Orderside::sell)
+    {
+        orderAdded = addOrder(asks, clientId, orderId, price, quantity);
     }
-    else if(order.side == Orderside::buy)
+    else if(side == Orderside::buy)
     {
-        auto [_a,b] = bids.insert(order);
-        orderAdded = b;
+        orderAdded = addOrder(bids, clientId, orderId, price, quantity);
     }
     else
     {
         return false;
     }
-    auto [_ite, addedInPlacedOrder] = placedOrders.insert(std::make_pair(orderKey, order));
+    auto [_ite, addedInPlacedOrder] = placedOrders.insert(std::make_pair(orderKey, std::make_pair(price, side)));
     return orderAdded && addedInPlacedOrder;
 }
 
@@ -75,21 +52,41 @@ bool Orderbook::cancel_order(int clientId, int orderId)
     if(iteOrder == placedOrders.end())
         return false;
     
-    const Order& order = iteOrder->second;
+    int price = iteOrder->second.first;
+    Orderside side = iteOrder->second.second;
     bool orderErased = false;
     std::unique_lock lk(mtx);
-    if(order.side == Orderside::sell)
+    auto removeOrder = [](auto& container, int clientId, int orderId, int price) -> bool
     {
-        orderErased = asks.erase(order) == 1;
+        auto ite = container.find(price);
+        if(ite == container.end())
+        {
+            return false;
+        }
+        else
+        {
+            bool orderRemoved = ite->second->remove_order(clientId, orderId);
+            if(ite->second->size == 0)
+            {
+                container.erase(ite);
+            }
+            return orderRemoved;
+        }
+    };
+
+    if (side == Orderside::sell)
+    {
+        orderErased = removeOrder(asks, clientId, orderId, price);
     }
-    else if(order.side == Orderside::buy)
+    else if(side == Orderside::buy)
     {
-        orderErased = bids.erase(order) == 1;
+        orderErased = removeOrder(bids, clientId, orderId, price);
     }
     else
     {
         return false;
     }
+
     return placedOrders.erase(orderKey) == 1 && orderErased;
 }
 void Orderbook::flush()
@@ -100,101 +97,82 @@ void Orderbook::flush()
     placedOrders.clear();
 }
 
-Order Orderbook::getMinAsk() const
+std::pair<int, int> Orderbook::get_min_ask() const
 {
     if(asks.empty())
-        return Order();
+        return std::make_pair(-1, -1);
     std::shared_lock lk(mtx);
-    return *asks.begin();
+    return std::make_pair( asks.begin()->first, asks.begin()->second->size);
 }
-Order Orderbook::getMaxBid() const
+std::pair<int, int> Orderbook::get_max_bid() const
 {
     if(bids.empty())
-        return Order();
+        return std::make_pair(-1, -1);
     std::shared_lock lk(mtx);
-    return *bids.begin();
+    return std::make_pair( bids.begin()->first, bids.begin()->second->size);
 }
 
-bool Orderbook::match(Order& order, MatchFunctor& matchFunctor)
+bool Orderbook::match(Orderside side, int clientId, int orderId, int price, int& quantity, MatchFunctor& matchFunctor)
 {
-    auto compartor = [](const Order& order, const Order& book_order) -> bool
+    auto comparator = [](const Orderside side, int price, const auto& asks, const auto& bids) -> bool
     {
-        if (order.side == Orderside::buy) // <- will get min ask
+        if (side == Orderside::buy) // <- will get min ask
         {
-            return book_order.price <= order.price || order.price == 0;
+            return asks.size() > 0 && (asks.begin()->first <= price || price == 0);
         }
-        else if (order.side == Orderside::sell) // <- will get max bid
+        else if (side == Orderside::sell) // <- will get max bid
         {
-            return book_order.price >= order.price || order.price == 0;
+            return bids.size() > 0 && (bids.begin()->first >= price || price == 0);
         }
         return false;
     };
-    
-    auto next = [this](Orderside side) -> Order
-    {
-        if (side == Orderside::buy)
-        {
-            if (asks.empty())
-                return Order();
-            return *asks.begin();
-        }
-        else if (side == Orderside::sell)
-        {
-            if (bids.empty())
-                return Order();
-            return *bids.begin();
-        }
-        return Order();
-    };
 
-    // returns true if order is not yet fullfilled
-    auto consume = [this, matchFunctor](Order& order) -> bool
+    auto consume = [side](auto& container, int clientId, int orderId, int& quantity, MatchFunctor& matchFunctor)
     {
-        Order bookOrder;
-        if (order.side == Orderside::buy)
+        auto ite = container.begin();
+        int book_price = ite->first;
+        auto& details = ite->second;
+        bool eraseIterator = false;
+        if (details->size > quantity)
         {
-            auto ite = asks.begin();
-            bookOrder = *ite;
-            asks.erase(ite);
-        }
-        else if (order.side == Orderside::sell)
-        {
-            auto ite = bids.begin();
-            bookOrder = *ite;
-            bids.erase(ite);
-        }
-        if (matchFunctor)
-        {
-            matchFunctor(bookOrder, order, bookOrder.price, std::min(bookOrder.size, order.size));
-        }
-        if (order.size >= bookOrder.size)
-        {
-            order.size -= bookOrder.size;
-            return true;
+            auto current = details->orderDetails.begin();
+            while(current != details->orderDetails.end() && quantity > 0)
+            {
+                matchFunctor(side, current->clientId, current->orderId, clientId, orderId, book_price, std::min(current->quantity, quantity));
+                if(current->quantity > quantity)
+                {
+                    current->quantity -= quantity;
+                    details->size -= quantity;
+                    quantity = 0;
+                    break;
+                }
+                quantity -= current->quantity;
+                details->size -= current->quantity;
+                ++current;
+            }
+            details->orderDetails.erase(details->orderDetails.begin(), current);
         }
         else
         {
-            bookOrder.size -= order.size;
-            order.size = 0;
-            if (order.side == Orderside::buy)
+            quantity -= details->size;
+            for (const auto& detail : details->orderDetails)
             {
-                asks.insert(bookOrder);
+                matchFunctor(side, detail.clientId, detail.orderId, clientId, orderId, book_price, detail.quantity);
             }
-            else
-            {
-                bids.insert(bookOrder);
-            }
-            return false;
+            container.erase(ite);
         }
     };
 
-    Order current = next(order.side);
-    
-    while (order.size > 0 && !current.isInvalid() && compartor(order, current))
+    while (quantity > 0 && comparator(side, price, asks, bids))
     {
-        if (!consume(order))
-            return true;
-        current = next(order.side);
+        if (side == Orderside::buy) // <- will get min ask
+        {
+            consume(asks, clientId, orderId, quantity, matchFunctor);
+        }
+        else if (side == Orderside::sell) // <- will get max bid
+        {
+            consume(bids, clientId, orderId, quantity, matchFunctor);
+        }
     }
-    return order.size > 0 ? false : true;
+    return quantity > 0 ? false : true;
 }

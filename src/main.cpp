@@ -26,6 +26,8 @@ using OrderbookManager = std::map<std::string, Orderbook>;
 # * TOB = Top Of Book, highest bid, lowest offer
 # * Between scenarios flush order books
 */
+
+
 struct InputCommand
 {
     virtual void execute(OrderbookManager& orderbooks, std::ostream& o) const = 0;
@@ -33,44 +35,41 @@ struct InputCommand
 
 struct OrderbookChangesTracker
 {
-    const Order minAsk, maxBid;
-    OrderbookChangesTracker(const Orderbook& orderbook) : minAsk(orderbook.getMinAsk()), maxBid(orderbook.getMaxBid())
-    {}
-
-    static bool CompareBids(const Order& a, const Order& b)
+    
+    std::pair<int, int> minAsk, maxBid;
+    OrderbookChangesTracker(const Orderbook& orderbook) : minAsk(orderbook.get_min_ask()), maxBid(orderbook.get_max_bid())
     {
-        return a.orderId != b.orderId || a.clientId != b.clientId || a.size != b.size;
     }
 
     void check(const Orderbook& orderbook, std::ostream& o) const
     {
-        Order newMinAsk = orderbook.getMinAsk(), newMaxBid = orderbook.getMaxBid();
-        if (CompareBids(newMinAsk, minAsk))
+        std::pair<int, int> newMinAsk(orderbook.get_min_ask()), newMaxBid(orderbook.get_max_bid());
+        if (newMinAsk != minAsk)
         {
-            if (newMinAsk == Order())
+            if (newMinAsk.second == -1)
             {
-                o << "S, -, -\n";
+                o << "B, S, -, -\n";
                 return;
             }
-            o << "B, S, " << newMinAsk.price << ", " << newMinAsk.size << "\n";
+            o << "B, S, " << newMinAsk.first << ", " << newMinAsk.second << "\n";
         }
-        if (CompareBids(newMaxBid, maxBid))
+        if (newMaxBid != maxBid)
         {
-            if (newMaxBid == Order())
+            if (newMaxBid.second == -1)
             {
-                o << "B, -, -\n";
+                o << "B, B, -, -\n";
                 return;
             }
-            o << "B, B, " << newMaxBid.price << ", " << newMaxBid.size << "\n";
+            o << "B, B, " << newMaxBid.first << ", " << newMaxBid.second << "\n";
         }
     }
 };
 
-void print_matched_transaction(std::ostream& o, const Order& book, const Order& order, int price, int quantity)
+void print_matched_transaction(std::ostream& o, Orderside orderside, int bookClientId, int bookClientOrderId, int clientId, int clientOrderId, int price, int quantity)
 {
-    const auto buyOrder = order.side == Orderside::buy ? order : book;
-    const auto sellOrder = order.side == Orderside::sell ? order : book;
-    o << "T, " << buyOrder.clientId << ", " << buyOrder.orderId << ", " << sellOrder.clientId << ", " << sellOrder.orderId << ", " << price << ", " << quantity << "\n";
+    const auto buyer = (orderside == Orderside::buy ? std::make_pair(clientId, clientOrderId) : std::make_pair(bookClientId, bookClientOrderId));
+    const auto seller = (orderside == Orderside::sell ? std::make_pair(clientId, clientOrderId) : std::make_pair(bookClientId, bookClientOrderId));
+    o << "T, " << buyer.first << ", " << buyer.second << ", " << seller.first << ", " << seller.second << ", " << price << ", " << quantity << "\n";
 }
 
 struct PrintCommand : InputCommand
@@ -102,14 +101,13 @@ struct NewOrderCommand : InputCommand
     virtual void execute(OrderbookManager& orderbooks, std::ostream& o) const override
     {
         OrderbookChangesTracker tracker(orderbooks[symbol]);
-        Order newOrder(side, userId, orderId, price, quantity);
         std::stringstream matchOrderSS;
-        Orderbook::MatchFunctor matchFunctor = [&matchOrderSS](const Order&a, const Order& b, int p, int q) -> bool
+        Orderbook::MatchFunctor matchFunctor = [&matchOrderSS](Orderside orderside, int bookClientId, int bookClientOrderId, int clientId, int clientOrderId, int price, int quantity) -> bool
         {
-            print_matched_transaction(matchOrderSS, a, b, p, q);
+            print_matched_transaction(matchOrderSS, orderside, bookClientId, bookClientOrderId, clientId, clientOrderId, price, quantity);
             return true;
         };
-        if (orderbooks[symbol].add_order(newOrder, matchFunctor))
+        if (orderbooks[symbol].add_order(side, userId, orderId, price, quantity, matchFunctor))
         {
             o << "A, " << userId << ", " << orderId << "\n";
             auto matchedString = matchOrderSS.str();

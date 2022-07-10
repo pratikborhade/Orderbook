@@ -4,7 +4,7 @@ project(kraken-test VERSION 0.1.0)
 include(CTest)
 enable_testing()
 
-add_library(orderbook src/orderbook/orderbook.cpp src/orderbook/order.cpp)
+add_library(orderbook src/orderbook/orderbook.cpp src/orderbook/orders.cpp)
 
 add_executable(kraken-test src/main.cpp)
 target_link_libraries(kraken-test PRIVATE orderbook)
